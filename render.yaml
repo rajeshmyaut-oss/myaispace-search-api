@@ -8,10 +8,8 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: ALLOWED_ORIGINS
-        value: https://myaispace.in,http://myaispace.in
+        value: https://myaispace.in,http://myaispace.in,http://localhost:3000
       - key: RATE_LIMIT_PER_MINUTE
         value: "30"
       - key: RATE_LIMIT_PER_DAY
         value: "500"
-      - key: OLLAMA_MODEL
-        value: qwen3:8b
