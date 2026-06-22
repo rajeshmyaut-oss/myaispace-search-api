@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: myaispace-search-api
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.main:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://myaispace.in,http://myaispace.in
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "30"
+      - key: RATE_LIMIT_PER_DAY
+        value: "500"
+      - key: OLLAMA_MODEL
+        value: qwen3:8b
