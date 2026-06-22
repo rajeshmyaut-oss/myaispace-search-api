@@ -30,13 +30,7 @@ app = Flask(__name__)
 # ── CORS — allow myaispace.in ─────────────────────────────────────────────────
 CORS(app, resources={
     r"/v1/*": {
-        "origins": [
-            "https://myaispace.in",
-            "http://myaispace.in",
-            "http://localhost:3000",
-            "http://localhost:5500",
-            "http://127.0.0.1:5500"
-        ],
+        "origins": "*",
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type", "X-API-Key"]
     }
@@ -759,4 +753,4 @@ if __name__ == "__main__":
     print("  http://localhost:8000")
     print("  Website: https://myaispace.in")
     print("="*50 + "\n")
-    app.run(host="0.0.0.0", port=8000, debug=True)
+    app.run(host="0.0.0.0", port=8000, debug=False, threaded=True)
