@@ -653,6 +653,23 @@ def serve_static(filename):
     )
 
 
+# ── School Tracker Web App ────────────────────────────────────────────────────
+_TRACKER_DIR = os.path.join(os.path.dirname(__file__), "..", "static", "school-tracker")
+
+@app.get("/school-tracker")
+@app.get("/school-tracker/")
+def serve_tracker():
+    return send_from_directory(_TRACKER_DIR, "index.html")
+
+@app.get("/school-tracker/<path:filename>")
+def serve_tracker_files(filename):
+    file_path = os.path.join(_TRACKER_DIR, filename)
+    if os.path.isfile(file_path):
+        return send_from_directory(_TRACKER_DIR, filename)
+    # All Flutter routes fall back to index.html (client-side routing)
+    return send_from_directory(_TRACKER_DIR, "index.html")
+
+
 # ── Streaming AI Chat Endpoint ────────────────────────────────────────────────
 @app.post("/v1/ai/chat")
 @require_api_key
