@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CompleteHealth AI Assistant — myaispace.in</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #161b25;
+      --surface2:  #1e2535;
+      --border:    #2a3347;
+      --accent:    #00b8a9;
+      --accent2:   #00d4c2;
+      --text:      #e8eaf0;
+      --muted:     #7a85a0;
+      --user-bg:   #0f3460;
+      --ai-bg:     #1e2535;
+      --radius:    14px;
+      --font:      'Inter', system-ui, sans-serif;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-badge {
+      width: 38px;
+      height: 38px;
+      background: linear-gradient(135deg, var(--accent), #0096ff);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.2;
+    }
+
+    .header-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34d399;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .back-link {
+      font-size: 13px;
+      color: var(--muted);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: color 0.2s;
+    }
+
+    .back-link:hover { color: var(--accent); }
+
+    /* ── Chat container ──────────────────────────────────────────── */
+    .chat-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 820px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 0 16px;
+    }
+
+    #messages {
+      flex: 1;
+      padding: 24px 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    /* ── Welcome screen ──────────────────────────────────────────── */
+    .welcome {
+      text-align: center;
+      padding: 48px 24px;
+    }
+
+    .welcome-icon {
+      width: 72px;
+      height: 72px;
+      background: linear-gradient(135deg, var(--accent), #0096ff);
+      border-radius: 20px;
+      margin: 0 auto 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+    }
+
+    .welcome h2 {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .welcome p {
+      color: var(--muted);
+      font-size: 14px;
+      max-width: 420px;
+      margin: 0 auto 28px;
+      line-height: 1.6;
+    }
+
+    .suggestions {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      max-width: 580px;
+      margin: 0 auto;
+    }
+
+    .suggestion-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.2s;
+      line-height: 1.4;
+    }
+
+    .suggestion-btn:hover {
+      border-color: var(--accent);
+      background: var(--surface2);
+    }
+
+    /* ── Message bubbles ─────────────────────────────────────────── */
+    .msg {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .msg.user { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    .avatar.ai {
+      background: linear-gradient(135deg, var(--accent), #0096ff);
+    }
+
+    .avatar.user {
+      background: var(--user-bg);
+      border: 1px solid var(--border);
+    }
+
+    .bubble {
+      max-width: 80%;
+      padding: 12px 16px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .msg.user .bubble {
+      background: var(--user-bg);
+      border: 1px solid #1a4a8a;
+      border-radius: 14px 4px 14px 14px;
+      color: var(--text);
+    }
+
+    .msg.ai .bubble {
+      background: var(--ai-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px 14px 14px 14px;
+    }
+
+    .bubble p { margin-bottom: 8px; }
+    .bubble p:last-child { margin-bottom: 0; }
+
+    /* ── Sources ─────────────────────────────────────────────────── */
+    .sources {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    .sources-label {
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .source-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .source-chip {
+      font-size: 11px;
+      padding: 3px 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      color: var(--accent2);
+      text-decoration: none;
+      transition: all 0.15s;
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .source-chip:hover {
+      border-color: var(--accent);
+      background: var(--surface2);
+    }
+
+    /* ── Typing indicator ─────────────────────────────────────────── */
+    .typing-dots {
+      display: flex;
+      gap: 4px;
+      padding: 4px 0;
+    }
+
+    .typing-dots span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: bounce 1.2s infinite;
+    }
+
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+
+    /* ── Input bar ───────────────────────────────────────────────── */
+    .input-bar {
+      padding: 16px 0 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 12px;
+      transition: border-color 0.2s;
+    }
+
+    .input-row:focus-within {
+      border-color: var(--accent);
+    }
+
+    #question {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 14px;
+      font-family: var(--font);
+      resize: none;
+      max-height: 120px;
+      min-height: 22px;
+      line-height: 1.5;
+    }
+
+    #question::placeholder { color: var(--muted); }
+
+    #send-btn {
+      width: 36px;
+      height: 36px;
+      background: var(--accent);
+      border: none;
+      border-radius: 9px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s;
+      color: white;
+    }
+
+    #send-btn:hover:not(:disabled) {
+      background: var(--accent2);
+      transform: scale(1.05);
+    }
+
+    #send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .input-hint {
+      text-align: center;
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    /* ── Error bubble ────────────────────────────────────────────── */
+    .error-msg {
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #f87171;
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .bubble { max-width: 92%; }
+      .suggestions { grid-template-columns: 1fr; }
+      header { padding: 12px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo-badge">CH</div>
+    <div>
+      <div class="header-title">CompleteHealth AI</div>
+      <div class="header-sub">Ask anything about CompleteHealth</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <div class="status-dot">
+      <div class="dot"></div>
+      AI Online
+    </div>
+    <a href="/" class="back-link">&#8592; MyAISpace</a>
+  </div>
+</header>
+
+<div class="chat-wrap">
+  <div id="messages">
+    <div class="welcome" id="welcome">
+      <div class="welcome-icon">&#129657;</div>
+      <h2>CompleteHealth AI Assistant</h2>
+      <p>Ask me anything about CompleteHealth — services, providers, insurance plans, urgent care, and more. Powered by completehealth.com knowledge base.</p>
+      <div class="suggestions">
+        <button class="suggestion-btn" onclick="fillQ('What services does CompleteHealth offer?')">
+          What services does CompleteHealth offer?
+        </button>
+        <button class="suggestion-btn" onclick="fillQ('How do I find a doctor in the network?')">
+          How do I find a doctor in the network?
+        </button>
+        <button class="suggestion-btn" onclick="fillQ('Where are CompleteHealth urgent care locations?')">
+          Where are urgent care locations?
+        </button>
+        <button class="suggestion-btn" onclick="fillQ('What insurance plans does CompleteHealth accept?')">
+          What insurance plans are accepted?
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-bar">
+    <div class="input-row">
+      <textarea id="question" placeholder="Ask about CompleteHealth..." rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button id="send-btn" onclick="sendQuestion()" title="Send">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+    <div class="input-hint">Powered by Qwen2.5:32B &amp; completehealth.com knowledge base &middot; <a href="https://myaispace.in" style="color:var(--muted);text-decoration:none;">myaispace.in</a></div>
+  </div>
+</div>
+
+<script>
+  const messagesEl = document.getElementById('messages');
+  const questionEl = document.getElementById('question');
+  const sendBtn    = document.getElementById('send-btn');
+  let   loading    = false;
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendQuestion();
+    }
+  }
+
+  function fillQ(text) {
+    questionEl.value = text;
+    autoResize(questionEl);
+    questionEl.focus();
+    sendQuestion();
+  }
+
+  function hideWelcome() {
+    const w = document.getElementById('welcome');
+    if (w) w.remove();
+  }
+
+  function addMsg(role, content, sources) {
+    hideWelcome();
+    const wrap = document.createElement('div');
+    wrap.className = `msg ${role}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = `avatar ${role}`;
+    avatar.textContent = role === 'user' ? '👤' : '🏥';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+
+    if (role === 'ai' && content) {
+      bubble.innerHTML = formatText(content);
+      if (sources && sources.length) {
+        const srcDiv = document.createElement('div');
+        srcDiv.className = 'sources';
+        srcDiv.innerHTML = `<div class="sources-label">Sources</div>
+          <div class="source-chips">
+            ${sources.map(url => {
+              const label = url.replace(/https?:\/\/(www\.)?/, '').replace(/\/$/, '');
+              return `<a class="source-chip" href="${url}" target="_blank" title="${url}">${label}</a>`;
+            }).join('')}
+          </div>`;
+        bubble.appendChild(srcDiv);
+      }
+    } else {
+      bubble.textContent = content;
+    }
+
+    wrap.appendChild(avatar);
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return bubble;
+  }
+
+  function addTyping() {
+    hideWelcome();
+    const wrap = document.createElement('div');
+    wrap.className = 'msg ai';
+    wrap.id = 'typing-indicator';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar ai';
+    avatar.textContent = '🏥';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+
+    wrap.appendChild(avatar);
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return wrap;
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typing-indicator');
+    if (el) el.remove();
+  }
+
+  function formatText(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/\[(\d+)\]/g, '<sup style="color:var(--accent);font-weight:600;">[$1]</sup>')
+      .split('\n\n').map(p => p.trim()).filter(Boolean)
+      .map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`)
+      .join('');
+  }
+
+  async function sendQuestion() {
+    const q = questionEl.value.trim();
+    if (!q || loading) return;
+
+    loading = true;
+    sendBtn.disabled = true;
+    questionEl.value = '';
+    questionEl.style.height = 'auto';
+
+    addMsg('user', q);
+    const typingEl = addTyping();
+
+    try {
+      const res = await fetch('/v1/completehealth/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, top_k: 4 })
+      });
+
+      removeTyping();
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Server error' }));
+        const errDiv = document.createElement('div');
+        errDiv.className = 'error-msg';
+        errDiv.textContent = 'Error: ' + (err.detail || err.error || 'Something went wrong');
+        messagesEl.appendChild(errDiv);
+      } else {
+        const data = await res.json();
+        addMsg('ai', data.answer, data.sources);
+      }
+    } catch (e) {
+      removeTyping();
+      const errDiv = document.createElement('div');
+      errDiv.className = 'error-msg';
+      errDiv.textContent = 'Could not connect to the AI. Make sure the RAG API is running.';
+      messagesEl.appendChild(errDiv);
+    }
+
+    loading = false;
+    sendBtn.disabled = false;
+    questionEl.focus();
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+</script>
+</body>
+</html>

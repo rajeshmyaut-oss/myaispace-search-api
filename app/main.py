@@ -761,6 +761,34 @@ def ai_chat():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+# ── CompleteHealth AI — page + proxy ─────────────────────────────────────────
+_CH_RAG_URL = os.getenv("COMPLETEHEALTH_RAG_URL", "http://localhost:8001")
+
+@app.get("/completehealth-ai")
+def serve_completehealth_ai():
+    return send_from_directory(
+        os.path.join(os.path.dirname(__file__), "..", "static"),
+        "completehealth-ai.html"
+    )
+
+@app.post("/v1/completehealth/ask")
+def completehealth_ask():
+    data = request.get_json()
+    if not data or not data.get("question"):
+        return jsonify({"error": "question field is required"}), 400
+    try:
+        resp = requests.post(
+            f"{_CH_RAG_URL}/ask",
+            json={"question": data["question"], "top_k": data.get("top_k", 4)},
+            timeout=120
+        )
+        return jsonify(resp.json()), resp.status_code
+    except requests.exceptions.ConnectionError:
+        return jsonify({"error": "RAG service offline", "detail": "CompleteHealth AI is not running. Start it with: py -m uvicorn main:app --port 8001"}), 503
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Boot ──────────────────────────────────────────────────────────────────────
 init_db()
 
