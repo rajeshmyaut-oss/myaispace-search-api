@@ -13,3 +13,5 @@ services:
         value: "30"
       - key: RATE_LIMIT_PER_DAY
         value: "500"
+      - key: COMPLETEHEALTH_RAG_URL
+        value: "https://alarm-enhanced-usd-cart.trycloudflare.com"
