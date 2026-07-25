@@ -761,6 +761,15 @@ def ai_chat():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+# ── My Videos — private Jellyfin link page ────────────────────────────────────
+@app.get("/myvideos")
+def serve_myvideos():
+    return send_from_directory(
+        os.path.join(os.path.dirname(__file__), "..", "static"),
+        "myvideos.html"
+    )
+
+
 # ── CompleteHealth AI — page + proxy ─────────────────────────────────────────
 _CH_RAG_URL = os.getenv("COMPLETEHEALTH_RAG_URL", "http://localhost:8001")
 
