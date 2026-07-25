@@ -789,6 +789,133 @@ def completehealth_ask():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Legal AI — page + proxy (family & civil law, Telangana) ─────────────────
+_LEGAL_RAG_URL = os.getenv("LEGAL_RAG_URL", "http://localhost:8002")
+_LEGAL_OFFLINE_DETAIL = "Legal AI is not running. Start it with: legal-rag\\start_rag.ps1"
+
+
+def _legal_proxy_error(e):
+    if isinstance(e, requests.exceptions.ConnectionError):
+        return jsonify({"error": "RAG service offline", "detail": _LEGAL_OFFLINE_DETAIL}), 503
+    return jsonify({"error": str(e)}), 500
+
+
+@app.get("/legal-ai")
+def serve_legal_ai():
+    return send_from_directory(
+        os.path.join(os.path.dirname(__file__), "..", "static"),
+        "legal-ai.html"
+    )
+
+
+@app.post("/v1/legal/ask")
+def legal_ask():
+    data = request.get_json()
+    if not data or not data.get("question"):
+        return jsonify({"error": "question field is required"}), 400
+    try:
+        resp = requests.post(
+            f"{_LEGAL_RAG_URL}/ask",
+            json={
+                "question": data["question"],
+                "matter_id": data.get("matter_id"),
+                "top_k": data.get("top_k", 5)
+            },
+            timeout=120
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
+@app.get("/v1/legal/draft-types")
+def legal_draft_types():
+    try:
+        resp = requests.get(f"{_LEGAL_RAG_URL}/draft-types", timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
+@app.get("/v1/legal/crosswalk")
+def legal_crosswalk():
+    try:
+        resp = requests.get(f"{_LEGAL_RAG_URL}/crosswalk", timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
+def _forward_admin_headers():
+    key = request.headers.get("X-Admin-Key", "")
+    return {"X-Admin-Key": key} if key else {}
+
+
+@app.post("/v1/legal/draft")
+def legal_draft():
+    data = request.get_json()
+    if not data or not data.get("draft_type") or not data.get("facts"):
+        return jsonify({"error": "draft_type and facts fields are required"}), 400
+    try:
+        resp = requests.post(
+            f"{_LEGAL_RAG_URL}/draft",
+            json={
+                "draft_type": data["draft_type"],
+                "facts": data["facts"],
+                "matter_id": data.get("matter_id")
+            },
+            headers=_forward_admin_headers(),
+            timeout=180
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
+@app.route("/v1/legal/matters", methods=["GET", "POST"])
+def legal_matters():
+    try:
+        if request.method == "POST":
+            data = request.get_json() or {}
+            resp = requests.post(
+                f"{_LEGAL_RAG_URL}/matters",
+                json={"name": data.get("name", ""), "matter_type": data.get("matter_type", "")},
+                headers=_forward_admin_headers(),
+                timeout=30
+            )
+        else:
+            resp = requests.get(f"{_LEGAL_RAG_URL}/matters", headers=_forward_admin_headers(), timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
+@app.get("/v1/legal/matters/<matter_id>")
+def legal_matter_detail(matter_id):
+    try:
+        resp = requests.get(f"{_LEGAL_RAG_URL}/matters/{matter_id}", headers=_forward_admin_headers(), timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
+@app.post("/v1/legal/matters/<matter_id>/upload")
+def legal_matter_upload(matter_id):
+    if "file" not in request.files:
+        return jsonify({"error": "file field is required (multipart/form-data)"}), 400
+    f = request.files["file"]
+    try:
+        resp = requests.post(
+            f"{_LEGAL_RAG_URL}/matters/{matter_id}/upload",
+            files={"file": (f.filename, f.stream, f.mimetype)},
+            headers=_forward_admin_headers(),
+            timeout=180
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
 # ── Boot ──────────────────────────────────────────────────────────────────────
 init_db()
 

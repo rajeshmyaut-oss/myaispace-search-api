@@ -15,3 +15,5 @@ services:
         value: "500"
       - key: COMPLETEHEALTH_RAG_URL
         value: "https://alarm-enhanced-usd-cart.trycloudflare.com"
+      - key: LEGAL_RAG_URL
+        sync: false
