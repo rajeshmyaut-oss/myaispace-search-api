@@ -255,6 +255,7 @@
   <button class="tab-btn" data-tab="matters" onclick="switchTab('matters')">Matters</button>
   <button class="tab-btn" data-tab="newmatter" onclick="switchTab('newmatter')">New Matter</button>
   <button class="tab-btn" data-tab="counter" onclick="switchTab('counter')">Counter Petition</button>
+  <button class="tab-btn" data-tab="strength" onclick="switchTab('strength')">Case Strength</button>
   <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
   <button class="tab-btn" data-tab="profile" onclick="switchTab('profile')">Lawyer Profile</button>
 </div>
@@ -386,6 +387,24 @@
   </div>
 </div>
 
+<!-- ── Case Strength tab ────────────────────────────────────────────── -->
+<div class="tab-panel" id="panel-strength">
+  <div class="panel-body">
+    <div class="cpc-callout">
+      This does <strong>not</strong> give a win percentage or any numeric prediction &mdash;
+      there's no dataset of comparable case outcomes behind this tool to support one, and a
+      number would just be a guess dressed up as a statistic. Instead it gives a qualitative
+      read: strengths, weaknesses, additional real legal grounds from the statute/case-law
+      corpus that aren't yet being used, relevant precedents, and procedural risks.
+    </div>
+    <div class="field"><label>Admin Key</label><input type="password" id="strength-admin-key" placeholder="X-Admin-Key" /></div>
+    <div class="field"><label>Matter (optional &mdash; pulls in that matter's uploaded documents)</label><select id="strength-matter-id"><option value="">No matter</option></select></div>
+    <div class="field"><label>Facts</label><textarea id="strength-facts" style="min-height:140px;" placeholder="Describe the facts of the matter (names, dates, amounts, relevant events)..."></textarea></div>
+    <button class="btn" onclick="assessCaseStrength()" id="strength-btn">Assess Case Strength</button>
+    <div id="strength-result"></div>
+  </div>
+</div>
+
 <!-- ── All Matters & Drafts tab ─────────────────────────────────────── -->
 <div class="tab-panel" id="panel-history">
   <div class="panel-body">
@@ -437,6 +456,7 @@
     if (name === 'counter' && !cpDraftTypesLoaded) loadDraftTypesCP();
     if (name === 'counter') populateMatterSelect('cp-matter-id', true);
     if (name === 'matters') populateMatterSelect('upload-matter-id', true);
+    if (name === 'strength') populateMatterSelect('strength-matter-id', true);
     if (name === 'history' && getAdminKey()) loadHistory();
   }
 
@@ -457,7 +477,7 @@
 
   // ── Shared admin key — enter it once, every tab uses the same value ──
   const ADMIN_KEY_STORAGE = 'legal_admin_key';
-  const ADMIN_KEY_FIELD_IDS = ['draft-admin-key', 'matters-admin-key', 'nm-admin-key', 'cp-admin-key', 'hist-admin-key', 'profile-admin-key'];
+  const ADMIN_KEY_FIELD_IDS = ['draft-admin-key', 'matters-admin-key', 'nm-admin-key', 'cp-admin-key', 'hist-admin-key', 'profile-admin-key', 'strength-admin-key'];
   function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || ''; }
   function initAdminKeySync() {
     const saved = getAdminKey();
@@ -934,6 +954,43 @@
       resultEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
     }
     btn.disabled = false; btn.textContent = 'Generate Counter Petition';
+  }
+
+  // ── Case Strength tab ─────────────────────────────────────────────
+  async function assessCaseStrength() {
+    const btn = document.getElementById('strength-btn');
+    const resultEl = document.getElementById('strength-result');
+    const key = document.getElementById('strength-admin-key').value.trim();
+    const matterId = document.getElementById('strength-matter-id').value;
+    const facts = document.getElementById('strength-facts').value.trim();
+
+    if (!facts) { resultEl.innerHTML = '<div class="error-msg">Describe the facts of the matter first.</div>'; return; }
+
+    btn.disabled = true; btn.textContent = 'Assessing...';
+    resultEl.innerHTML = '';
+    try {
+      const res = await fetch('/v1/legal/case-strength', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+        body: JSON.stringify({ facts, matter_id: matterId || null })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        resultEl.innerHTML = `<div class="error-msg">Error: ${data.detail || data.error || 'Something went wrong'}</div>`;
+      } else {
+        resultEl.innerHTML =
+          `<div class="draft-output">${(data.assessment || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` +
+          `<div class="cw-note" style="margin-top:8px;">${data.disclaimer || ''}</div>` +
+          (data.sources && data.sources.length
+            ? `<div class="sources" style="border-top:none;margin-top:10px;"><div class="sources-label">Sources</div><div class="source-chips">${data.sources.map(renderSource).join('')}</div></div>`
+            : '') +
+          `<button class="btn secondary" id="strength-download-btn" style="margin-top:12px;">Download as Word (.doc)</button>`;
+        document.getElementById('strength-download-btn').onclick = () => downloadDraftAsWord(data.assessment || '', 'case-strength-assessment');
+      }
+    } catch (e) {
+      resultEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
+    }
+    btn.disabled = false; btn.textContent = 'Assess Case Strength';
   }
 
   // ── All Matters & Drafts tab ──────────────────────────────────────

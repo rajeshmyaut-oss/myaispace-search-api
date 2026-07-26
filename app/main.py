@@ -952,6 +952,23 @@ def legal_lawyer_profile():
         return _legal_proxy_error(e)
 
 
+@app.post("/v1/legal/case-strength")
+def legal_case_strength():
+    data = request.get_json()
+    if not data or not data.get("facts"):
+        return jsonify({"error": "facts field is required"}), 400
+    try:
+        resp = requests.post(
+            f"{_LEGAL_RAG_URL}/case-strength",
+            json={"facts": data["facts"], "matter_id": data.get("matter_id")},
+            headers=_forward_admin_headers(),
+            timeout=120
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
 @app.get("/v1/legal/drafts")
 def legal_drafts():
     try:
