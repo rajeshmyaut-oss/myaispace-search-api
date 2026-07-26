@@ -204,6 +204,9 @@
     .matter-card .name { font-weight: 600; font-size: 13px; }
     .matter-card .meta { font-size: 11px; color: var(--muted); }
 
+    .missing-list { margin: 8px 0 0 18px; }
+    .missing-list li { margin-bottom: 4px; }
+
     @media (max-width: 600px) {
       .bubble { max-width: 92%; }
       .suggestions { grid-template-columns: 1fr; }
@@ -237,6 +240,7 @@
   <button class="tab-btn" data-tab="draft" onclick="switchTab('draft')">Draft</button>
   <button class="tab-btn" data-tab="lawref" onclick="switchTab('lawref')">Law Reference</button>
   <button class="tab-btn" data-tab="matters" onclick="switchTab('matters')">Matters</button>
+  <button class="tab-btn" data-tab="newmatter" onclick="switchTab('newmatter')">New Matter</button>
 </div>
 
 <!-- ── Research tab ────────────────────────────────────────────────── -->
@@ -313,6 +317,31 @@
   </div>
 </div>
 
+<!-- ── New Matter tab ──────────────────────────────────────────────── -->
+<div class="tab-panel" id="panel-newmatter">
+  <div class="panel-body">
+    <div class="cpc-callout">
+      This creates a matter and drafts from the facts you provide. The AI fills in the template
+      from what you write below and leaves anything you didn't mention as a
+      <code>{{placeholder}}</code> — it will not invent names, dates, incidents, or amounts to
+      make the draft look more complete. Get missing details from the client, then regenerate.
+    </div>
+    <div class="field"><label>Admin Key</label><input type="password" id="nm-admin-key" placeholder="X-Admin-Key" /></div>
+    <div class="field"><label>Matter Name</label><input type="text" id="nm-matter-name" placeholder="e.g. Sharma vs Sharma — Divorce" /></div>
+    <div class="field"><label>Matter Type</label><input type="text" id="nm-matter-type" placeholder="e.g. Family / Civil" /></div>
+    <div class="field">
+      <label>Draft Type</label>
+      <select id="nm-draft-type"><option value="">Loading templates&hellip;</option></select>
+    </div>
+    <div class="field">
+      <label>Facts &amp; Narrative</label>
+      <textarea id="nm-facts" style="min-height:160px;" placeholder="Write out everything the client told you: names, ages, addresses, dates, what happened and when, amounts, witnesses. The more real detail you give, the fewer placeholders are left in the draft."></textarea>
+    </div>
+    <button class="btn" onclick="createMatterAndDraft()" id="nm-btn">Create Matter &amp; Generate Draft</button>
+    <div id="nm-result"></div>
+  </div>
+</div>
+
 <script>
   // ── Tabs ─────────────────────────────────────────────────────────
   function switchTab(name) {
@@ -321,6 +350,7 @@
     document.getElementById('panel-' + name).classList.add('active');
     if (name === 'draft' && !draftTypesLoaded) loadDraftTypes();
     if (name === 'lawref' && !crosswalkLoaded) loadCrosswalk();
+    if (name === 'newmatter' && !nmDraftTypesLoaded) loadDraftTypesNM();
   }
 
   // ── Research chat ────────────────────────────────────────────────
@@ -424,6 +454,25 @@
     loading = false; sendBtn.disabled = false; questionEl.focus();
   }
 
+  // ── Word (.doc) export — no library needed; Word opens HTML files that
+  // declare the Office/Word XML namespaces, so we just wrap the draft text.
+  function downloadDraftAsWord(text, filenameBase) {
+    const escaped = (text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const bodyHtml = escaped.split('\n').map(line => line.trim() ? `<p>${line}</p>` : '<p>&nbsp;</p>').join('');
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${filenameBase}</title>
+<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument></xml><![endif]-->
+<style>body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5;} p{margin:0 0 8pt 0;}</style>
+</head><body>${bodyHtml}</body></html>`;
+    const blob = new Blob(['﻿', html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(filenameBase || 'draft').replace(/[^a-z0-9]+/gi, '_')}.doc`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   // ── Draft tab ────────────────────────────────────────────────────
   let draftTypesLoaded = false;
   async function loadDraftTypes() {
@@ -458,7 +507,8 @@
       if (!res.ok) {
         resultEl.innerHTML = `<div class="error-msg">Error: ${data.detail || data.error || 'Something went wrong'}</div>`;
       } else {
-        resultEl.innerHTML = `<div class="draft-output">${(data.draft || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div><div class="cw-note" style="margin-top:8px;">${data.disclaimer || ''}</div>`;
+        resultEl.innerHTML = `<div class="draft-output">${(data.draft || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div><div class="cw-note" style="margin-top:8px;">${data.disclaimer || ''}</div><button class="btn secondary" id="draft-download-btn" style="margin-top:12px;">Download as Word (.doc)</button>`;
+        document.getElementById('draft-download-btn').onclick = () => downloadDraftAsWord(data.draft || '', draftType);
       }
     } catch (e) {
       resultEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
@@ -521,6 +571,86 @@
     } catch (e) {
       alert('Could not connect to the AI. Make sure the Legal RAG service is running.');
     }
+  }
+
+  // ── New Matter tab (create matter + draft in one step) ────────────
+  let nmDraftTypesLoaded = false;
+  async function loadDraftTypesNM() {
+    const sel = document.getElementById('nm-draft-type');
+    try {
+      const res = await fetch('/v1/legal/draft-types');
+      const data = await res.json();
+      sel.innerHTML = (data.draft_types || []).map(t => `<option value="${t.draft_type}">${t.title}</option>`).join('') || '<option value="">No templates found</option>';
+      nmDraftTypesLoaded = true;
+    } catch (e) {
+      sel.innerHTML = '<option value="">Could not load templates — is Legal RAG running?</option>';
+    }
+  }
+
+  function extractMissingDetails(draftText) {
+    const matches = draftText.match(/\{\{[a-zA-Z0-9_]+\}\}/g) || [];
+    const unique = [...new Set(matches)];
+    return unique.map(m => m.slice(2, -2).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+  }
+
+  async function createMatterAndDraft() {
+    const btn = document.getElementById('nm-btn');
+    const resultEl = document.getElementById('nm-result');
+    const key = document.getElementById('nm-admin-key').value.trim();
+    const name = document.getElementById('nm-matter-name').value.trim();
+    const matterType = document.getElementById('nm-matter-type').value.trim();
+    const draftType = document.getElementById('nm-draft-type').value;
+    const facts = document.getElementById('nm-facts').value.trim();
+
+    if (!name || !draftType || !facts) {
+      resultEl.innerHTML = '<div class="error-msg">Enter a matter name, pick a draft type, and describe the facts first.</div>';
+      return;
+    }
+
+    btn.disabled = true; btn.textContent = 'Working...';
+    resultEl.innerHTML = '';
+    try {
+      const matterRes = await fetch('/v1/legal/matters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+        body: JSON.stringify({ name, matter_type: matterType })
+      });
+      const matter = await matterRes.json();
+      if (!matterRes.ok) {
+        resultEl.innerHTML = `<div class="error-msg">Could not create matter: ${matter.detail || 'Something went wrong'}</div>`;
+        return;
+      }
+
+      const draftRes = await fetch('/v1/legal/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+        body: JSON.stringify({ draft_type: draftType, facts, matter_id: matter.id })
+      });
+      const draft = await draftRes.json();
+      if (!draftRes.ok) {
+        resultEl.innerHTML = `<div class="error-msg">Matter <strong>${matter.id}</strong> was created, but drafting failed: ${draft.detail || draft.error || 'Something went wrong'}</div>`;
+        return;
+      }
+
+      const missing = extractMissingDetails(draft.draft || '');
+      const missingBlock = missing.length
+        ? `<div class="cpc-callout" style="margin-top:16px;">
+             <strong>Still needed before filing</strong> &mdash; not enough was said about these for the AI to fill them in, so get the real details from the client rather than guessing:
+             <ul class="missing-list">${missing.map(l => `<li>${l}</li>`).join('')}</ul>
+           </div>`
+        : `<div class="cw-note" style="margin-top:16px;">No placeholders left unfilled based on the facts given &mdash; still verify every detail before filing.</div>`;
+
+      resultEl.innerHTML =
+        `<div class="cw-note" style="margin-top:16px;">Matter created: <strong>${matter.name}</strong> (${matter.id})</div>` +
+        `<div class="draft-output">${(draft.draft || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` +
+        `<div class="cw-note" style="margin-top:8px;">${draft.disclaimer || ''}</div>` +
+        `<button class="btn secondary" id="nm-download-btn" style="margin-top:12px;">Download as Word (.doc)</button>` +
+        missingBlock;
+      document.getElementById('nm-download-btn').onclick = () => downloadDraftAsWord(draft.draft || '', name);
+    } catch (e) {
+      resultEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
+    }
+    btn.disabled = false; btn.textContent = 'Create Matter & Generate Draft';
   }
 
   async function uploadDoc() {
