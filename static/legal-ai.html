@@ -597,7 +597,7 @@
       if (!res.ok) {
         resultEl.innerHTML = `<div class="error-msg">Error: ${data.detail || data.error || 'Something went wrong'}</div>`;
       } else {
-        resultEl.innerHTML = `<div class="draft-output">${(data.draft || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div><div class="cw-note" style="margin-top:8px;">${data.disclaimer || ''}</div><button class="btn secondary" id="draft-download-btn" style="margin-top:12px;">Download as Word (.doc)</button>`;
+        resultEl.innerHTML = `<div class="draft-output">${(data.draft || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div><div class="cw-note" style="margin-top:8px;">${data.disclaimer || ''}</div><button class="btn secondary" id="draft-download-btn" style="margin-top:12px;">Download as Word (.doc)</button>${renderAttachmentsChecklist(data.attachments_needed, data.attachments_uploaded)}`;
         document.getElementById('draft-download-btn').onclick = () => downloadDraftAsWord(data.draft || '', draftType);
       }
     } catch (e) {
@@ -677,6 +677,26 @@
     }
   }
 
+  function renderAttachmentsChecklist(needed, uploaded) {
+    if (!needed || !needed.length) return '';
+    const uploadedNote = (uploaded && uploaded.length)
+      ? `<div class="cw-note" style="margin-bottom:8px;">Already uploaded to this matter: ${uploaded.map(escapeHtml).join(', ')}</div>`
+      : `<div class="cw-note" style="margin-bottom:8px;">No documents uploaded to this matter yet — attach these separately, or upload them via the Matters tab.</div>`;
+    const items = needed.map(a => `
+      <label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;font-size:13px;cursor:pointer;">
+        <input type="checkbox" style="margin-top:3px;">
+        <span>${escapeHtml(a)}</span>
+      </label>
+    `).join('');
+    return `
+      <div class="cpc-callout" style="margin-top:16px;">
+        <strong>Attachments checklist for this filing</strong><br><br>
+        ${uploadedNote}
+        ${items}
+      </div>
+    `;
+  }
+
   function extractMissingDetails(draftText) {
     const matches = draftText.match(/\{\{[a-zA-Z0-9_]+\}\}/g) || [];
     const unique = [...new Set(matches)];
@@ -735,6 +755,7 @@
         `<div class="draft-output">${(draft.draft || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` +
         `<div class="cw-note" style="margin-top:8px;">${draft.disclaimer || ''}</div>` +
         `<button class="btn secondary" id="nm-download-btn" style="margin-top:12px;">Download as Word (.doc)</button>` +
+        renderAttachmentsChecklist(draft.attachments_needed, draft.attachments_uploaded) +
         missingBlock;
       document.getElementById('nm-download-btn').onclick = () => downloadDraftAsWord(draft.draft || '', name);
     } catch (e) {
@@ -851,6 +872,7 @@
           `<div class="draft-output">${(data.draft || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` +
           `<div class="cw-note" style="margin-top:8px;">${data.disclaimer || ''}</div>` +
           `<button class="btn secondary" id="cp-download-btn" style="margin-top:12px;">Download as Word (.doc)</button>` +
+          renderAttachmentsChecklist(data.attachments_needed, data.attachments_uploaded) +
           missingBlock;
         document.getElementById('cp-download-btn').onclick = () => downloadDraftAsWord(data.draft || '', draftType);
       }
@@ -916,6 +938,7 @@
         </div>
         <div class="draft-card-body" id="hist-draft-body-${i}" style="display:none;">
           <div class="draft-output">${escapeHtml(d.draft || '')}</div>
+          ${renderAttachmentsChecklist(d.attachments_needed, d.attachments_uploaded)}
         </div>
       </div>
     `).join('');
