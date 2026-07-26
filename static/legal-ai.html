@@ -255,7 +255,7 @@
   <button class="tab-btn" data-tab="matters" onclick="switchTab('matters')">Matters</button>
   <button class="tab-btn" data-tab="newmatter" onclick="switchTab('newmatter')">New Matter</button>
   <button class="tab-btn" data-tab="counter" onclick="switchTab('counter')">Counter Petition</button>
-  <button class="tab-btn" data-tab="history" onclick="switchTab('history')">All Matters &amp; Drafts</button>
+  <button class="tab-btn" data-tab="history" onclick="switchTab('history')">History</button>
   <button class="tab-btn" data-tab="profile" onclick="switchTab('profile')">Lawyer Profile</button>
 </div>
 
@@ -298,7 +298,7 @@
       <label>Draft Type</label>
       <select id="draft-type"><option value="">Loading templates&hellip;</option></select>
     </div>
-    <div class="field"><label>Matter ID (optional &mdash; pulls in that matter's uploaded documents)</label><input type="text" id="draft-matter-id" placeholder="e.g. a1b2c3d4e5f6" /></div>
+    <div class="field"><label>Matter (optional &mdash; pulls in that matter's uploaded documents)</label><select id="draft-matter-id"><option value="">No matter</option></select></div>
     <div class="field"><label>Facts</label><textarea id="draft-facts" placeholder="Describe the facts of the matter (names, dates, amounts, relevant events)..."></textarea></div>
     <button class="btn" onclick="generateDraft()" id="draft-btn">Generate Draft</button>
     <div id="draft-result"></div>
@@ -326,7 +326,7 @@
     <div style="height:24px;"></div>
     <div id="matters-list"></div>
     <div style="height:24px;"></div>
-    <div class="field"><label>Upload Document to Matter ID</label><input type="text" id="upload-matter-id" placeholder="matter id" /></div>
+    <div class="field"><label>Upload Document to Matter</label><select id="upload-matter-id"><option value="">Select a matter&hellip;</option></select></div>
     <div class="field"><input type="file" id="upload-file" /></div>
     <button class="btn secondary" onclick="uploadDoc()">Upload</button>
     <div id="upload-result" style="margin-top:10px;font-size:12px;color:var(--muted);"></div>
@@ -374,7 +374,7 @@
     <div id="cp-allegations" style="margin-top:20px;"></div>
 
     <div id="cp-draft-section" style="display:none; margin-top:20px;">
-      <div class="field"><label>Matter ID (optional &mdash; pulls in that matter's uploaded documents)</label><input type="text" id="cp-matter-id" placeholder="e.g. a1b2c3d4e5f6" /></div>
+      <div class="field"><label>Matter (optional &mdash; pulls in that matter's uploaded documents)</label><select id="cp-matter-id"><option value="">No matter</option></select></div>
       <div class="field">
         <label>Counter Draft Type</label>
         <select id="cp-draft-type"><option value="">Loading templates&hellip;</option></select>
@@ -431,10 +431,13 @@
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById('panel-' + name).classList.add('active');
     if (name === 'draft' && !draftTypesLoaded) loadDraftTypes();
+    if (name === 'draft') populateMatterSelect('draft-matter-id', true);
     if (name === 'lawref' && !crosswalkLoaded) loadCrosswalk();
     if (name === 'newmatter' && !nmDraftTypesLoaded) loadDraftTypesNM();
     if (name === 'counter' && !cpDraftTypesLoaded) loadDraftTypesCP();
-    if (name === 'history') loadHistory();
+    if (name === 'counter') populateMatterSelect('cp-matter-id', true);
+    if (name === 'matters') populateMatterSelect('upload-matter-id', true);
+    if (name === 'history' && getAdminKey()) loadHistory();
   }
 
   // ── Research chat ────────────────────────────────────────────────
@@ -451,6 +454,23 @@
   function escapeHtml(s) {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
+
+  // ── Shared admin key — enter it once, every tab uses the same value ──
+  const ADMIN_KEY_STORAGE = 'legal_admin_key';
+  const ADMIN_KEY_FIELD_IDS = ['draft-admin-key', 'matters-admin-key', 'nm-admin-key', 'cp-admin-key', 'hist-admin-key', 'profile-admin-key'];
+  function getAdminKey() { return localStorage.getItem(ADMIN_KEY_STORAGE) || ''; }
+  function initAdminKeySync() {
+    const saved = getAdminKey();
+    const fields = ADMIN_KEY_FIELD_IDS.map(id => document.getElementById(id)).filter(Boolean);
+    fields.forEach(el => {
+      el.value = saved;
+      el.addEventListener('input', () => {
+        localStorage.setItem(ADMIN_KEY_STORAGE, el.value);
+        fields.forEach(other => { if (other !== el) other.value = el.value; });
+      });
+    });
+  }
+  initAdminKeySync();
 
   function renderSource(s) {
     const label = escapeHtml(s);
@@ -625,6 +645,39 @@
   }
 
   // ── Matters tab ──────────────────────────────────────────────────
+  function matterCardHtml(m, refreshFnName) {
+    return `<div class="matter-card"><div><div class="name">${escapeHtml(m.name)}</div><div class="meta">${m.id} &middot; ${escapeHtml(m.matter_type || 'General')} &middot; ${m.document_count || 0} doc(s)</div></div><button class="btn secondary icon-btn" style="color:#f87171;" onclick="deleteMatterUI('${m.id}', ${refreshFnName})">Delete</button></div>`;
+  }
+
+  async function deleteMatterUI(id, refreshFn) {
+    if (!confirm('Delete this matter and all its uploaded documents? This cannot be undone.')) return;
+    const key = getAdminKey();
+    try {
+      const res = await fetch(`/v1/legal/matters/${id}`, { method: 'DELETE', headers: { 'X-Admin-Key': key } });
+      if (res.ok) { if (refreshFn) refreshFn(); } else { const d = await res.json(); alert(d.detail || 'Delete failed'); }
+    } catch (e) {
+      alert('Could not connect to the AI. Make sure the Legal RAG service is running.');
+    }
+  }
+
+  async function populateMatterSelect(selectId, keepCurrent) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const current = keepCurrent ? sel.value : '';
+    const key = getAdminKey();
+    if (!key) { sel.innerHTML = '<option value="">No matter (enter admin key first)</option>'; return; }
+    try {
+      const res = await fetch('/v1/legal/matters', { headers: { 'X-Admin-Key': key } });
+      const data = await res.json();
+      if (!res.ok) { sel.innerHTML = '<option value="">No matter</option>'; return; }
+      const matters = data.matters || [];
+      sel.innerHTML = '<option value="">No matter</option>' + matters.map(m => `<option value="${m.id}">${escapeHtml(m.name)} (${m.id})</option>`).join('');
+      if (current) sel.value = current;
+    } catch (e) {
+      sel.innerHTML = '<option value="">No matter</option>';
+    }
+  }
+
   async function loadMatters() {
     const key = document.getElementById('matters-admin-key').value.trim();
     const listEl = document.getElementById('matters-list');
@@ -635,8 +688,9 @@
       if (!res.ok) { listEl.innerHTML = `<div class="error-msg">${data.detail || 'Error loading matters'}</div>`; return; }
       const matters = data.matters || [];
       listEl.innerHTML = matters.length
-        ? matters.map(m => `<div class="matter-card"><div><div class="name">${m.name}</div><div class="meta">${m.id} &middot; ${m.matter_type || 'General'} &middot; ${m.document_count || 0} doc(s)</div></div></div>`).join('')
+        ? matters.map(m => matterCardHtml(m, 'loadMatters')).join('')
         : '<div class="cw-note">No matters yet.</div>';
+      populateMatterSelect('upload-matter-id', true);
     } catch (e) {
       listEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
     }
@@ -904,7 +958,7 @@
       } else {
         const matters = mData.matters || [];
         mattersEl.innerHTML = matters.length
-          ? matters.map(m => `<div class="matter-card"><div><div class="name">${m.name}</div><div class="meta">${m.id} &middot; ${m.matter_type || 'General'} &middot; ${m.document_count || 0} doc(s)</div></div></div>`).join('')
+          ? matters.map(m => matterCardHtml(m, 'loadHistory')).join('')
           : '<div class="cw-note">No matters yet.</div>';
       }
 
@@ -1014,7 +1068,7 @@
     const matterId = document.getElementById('upload-matter-id').value.trim();
     const fileInput = document.getElementById('upload-file');
     const resultEl = document.getElementById('upload-result');
-    if (!matterId || !fileInput.files.length) { resultEl.textContent = 'Enter a matter ID and choose a file first.'; return; }
+    if (!matterId || !fileInput.files.length) { resultEl.textContent = 'Select a matter and choose a file first.'; return; }
     const fd = new FormData();
     fd.append('file', fileInput.files[0]);
     resultEl.textContent = 'Uploading...';

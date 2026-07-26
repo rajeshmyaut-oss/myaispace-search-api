@@ -908,6 +908,15 @@ def legal_matter_detail(matter_id):
         return _legal_proxy_error(e)
 
 
+@app.delete("/v1/legal/matters/<matter_id>")
+def legal_matter_delete(matter_id):
+    try:
+        resp = requests.delete(f"{_LEGAL_RAG_URL}/matters/{matter_id}", headers=_forward_admin_headers(), timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
 @app.post("/v1/legal/matters/<matter_id>/upload")
 def legal_matter_upload(matter_id):
     if "file" not in request.files:
