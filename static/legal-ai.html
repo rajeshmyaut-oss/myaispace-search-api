@@ -212,6 +212,14 @@
     .allegation-text .num { color: var(--accent2); font-weight: 700; margin-right: 4px; }
     .allegation-card textarea { min-height: 60px; }
 
+    .section-label { font-size: 13px; font-weight: 700; margin: 24px 0 10px; color: var(--text); }
+    .draft-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+    .draft-card-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+    .draft-card-header .name { font-weight: 600; font-size: 13px; text-transform: capitalize; }
+    .draft-card-header .meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .draft-card-body { margin-top: 12px; }
+    .icon-btn { padding: 5px 10px; font-size: 11px; }
+
     @media (max-width: 600px) {
       .bubble { max-width: 92%; }
       .suggestions { grid-template-columns: 1fr; }
@@ -247,6 +255,7 @@
   <button class="tab-btn" data-tab="matters" onclick="switchTab('matters')">Matters</button>
   <button class="tab-btn" data-tab="newmatter" onclick="switchTab('newmatter')">New Matter</button>
   <button class="tab-btn" data-tab="counter" onclick="switchTab('counter')">Counter Petition</button>
+  <button class="tab-btn" data-tab="history" onclick="switchTab('history')">All Matters &amp; Drafts</button>
 </div>
 
 <!-- ── Research tab ────────────────────────────────────────────────── -->
@@ -376,6 +385,21 @@
   </div>
 </div>
 
+<!-- ── All Matters & Drafts tab ─────────────────────────────────────── -->
+<div class="tab-panel" id="panel-history">
+  <div class="panel-body">
+    <div class="cpc-callout">Requires an admin key. Shows every matter and every draft ever generated (Draft, New Matter, and Counter Petition tabs all save here).</div>
+    <div class="field"><label>Admin Key</label><input type="password" id="hist-admin-key" placeholder="X-Admin-Key" /></div>
+    <button class="btn secondary" onclick="loadHistory()">Refresh</button>
+
+    <div class="section-label">Matters</div>
+    <div id="hist-matters"></div>
+
+    <div class="section-label">Drafts</div>
+    <div id="hist-drafts"></div>
+  </div>
+</div>
+
 <script>
   // ── Tabs ─────────────────────────────────────────────────────────
   function switchTab(name) {
@@ -386,6 +410,7 @@
     if (name === 'lawref' && !crosswalkLoaded) loadCrosswalk();
     if (name === 'newmatter' && !nmDraftTypesLoaded) loadDraftTypesNM();
     if (name === 'counter' && !cpDraftTypesLoaded) loadDraftTypesCP();
+    if (name === 'history') loadHistory();
   }
 
   // ── Research chat ────────────────────────────────────────────────
@@ -809,6 +834,82 @@
       resultEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
     }
     btn.disabled = false; btn.textContent = 'Generate Counter Petition';
+  }
+
+  // ── All Matters & Drafts tab ──────────────────────────────────────
+  let histDraftsCache = [];
+
+  async function loadHistory() {
+    const key = document.getElementById('hist-admin-key').value.trim();
+    const mattersEl = document.getElementById('hist-matters');
+    const draftsEl = document.getElementById('hist-drafts');
+    mattersEl.textContent = 'Loading...';
+    draftsEl.textContent = 'Loading...';
+    try {
+      const [mRes, dRes] = await Promise.all([
+        fetch('/v1/legal/matters', { headers: { 'X-Admin-Key': key } }),
+        fetch('/v1/legal/drafts', { headers: { 'X-Admin-Key': key } })
+      ]);
+      const mData = await mRes.json();
+      const dData = await dRes.json();
+
+      if (!mRes.ok) {
+        mattersEl.innerHTML = `<div class="error-msg">${mData.detail || 'Error loading matters'}</div>`;
+      } else {
+        const matters = mData.matters || [];
+        mattersEl.innerHTML = matters.length
+          ? matters.map(m => `<div class="matter-card"><div><div class="name">${m.name}</div><div class="meta">${m.id} &middot; ${m.matter_type || 'General'} &middot; ${m.document_count || 0} doc(s)</div></div></div>`).join('')
+          : '<div class="cw-note">No matters yet.</div>';
+      }
+
+      if (!dRes.ok) {
+        draftsEl.innerHTML = `<div class="error-msg">${dData.detail || 'Error loading drafts'}</div>`;
+      } else {
+        histDraftsCache = dData.drafts || [];
+        renderHistDrafts();
+      }
+    } catch (e) {
+      mattersEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
+      draftsEl.innerHTML = '';
+    }
+  }
+
+  function renderHistDrafts() {
+    const draftsEl = document.getElementById('hist-drafts');
+    if (!histDraftsCache.length) { draftsEl.innerHTML = '<div class="cw-note">No drafts yet.</div>'; return; }
+    draftsEl.innerHTML = histDraftsCache.map((d, i) => `
+      <div class="draft-card">
+        <div class="draft-card-header">
+          <div>
+            <div class="name">${(d.draft_type || '').replace(/_/g, ' ')}</div>
+            <div class="meta">${d.matter_id ? 'Matter: ' + d.matter_id + ' &middot; ' : ''}${new Date(d.created_at).toLocaleString()}</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn secondary icon-btn" onclick="toggleHistDraft(${i})">View</button>
+            <button class="btn secondary icon-btn" onclick="downloadDraftAsWord(histDraftsCache[${i}].draft, histDraftsCache[${i}].draft_type)">Word</button>
+            <button class="btn secondary icon-btn" style="color:#f87171;" onclick="deleteHistDraft('${d.id}')">Delete</button>
+          </div>
+        </div>
+        <div class="draft-card-body" id="hist-draft-body-${i}" style="display:none;">
+          <div class="draft-output">${escapeHtml(d.draft || '')}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function toggleHistDraft(i) {
+    const el = document.getElementById(`hist-draft-body-${i}`);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  }
+
+  async function deleteHistDraft(id) {
+    const key = document.getElementById('hist-admin-key').value.trim();
+    try {
+      const res = await fetch(`/v1/legal/drafts/${id}`, { method: 'DELETE', headers: { 'X-Admin-Key': key } });
+      if (res.ok) { loadHistory(); } else { const data = await res.json(); alert(data.detail || 'Delete failed'); }
+    } catch (e) {
+      alert('Could not connect to the AI. Make sure the Legal RAG service is running.');
+    }
   }
 
   async function uploadDoc() {
