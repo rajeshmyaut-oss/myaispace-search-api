@@ -142,7 +142,10 @@
     .source-chip {
       font-size: 11px; padding: 3px 8px; background: var(--surface); border: 1px solid var(--border);
       border-radius: 20px; color: var(--accent2); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      text-decoration: none; display: inline-block;
     }
+    a.source-chip { cursor: pointer; }
+    a.source-chip:hover { text-decoration: underline; border-color: var(--accent2); }
 
     .typing-dots { display: flex; gap: 4px; padding: 4px 0; }
     .typing-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: bounce 1.2s infinite; }
@@ -331,6 +334,19 @@
   function fillQ(text) { questionEl.value = text; autoResize(questionEl); questionEl.focus(); sendQuestion(); }
   function hideWelcome() { const w = document.getElementById('welcome'); if (w) w.remove(); }
 
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function renderSource(s) {
+    const label = escapeHtml(s);
+    const m = s.match(/\((https?:\/\/[^\s)]+)\)\s*$/);
+    if (m) {
+      return `<a class="source-chip" href="${m[1]}" target="_blank" rel="noopener noreferrer" title="${label}">${label}</a>`;
+    }
+    return `<span class="source-chip" title="${label}">${label}</span>`;
+  }
+
   function formatText(text) {
     return text
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -354,7 +370,7 @@
       if (sources && sources.length) {
         const srcDiv = document.createElement('div');
         srcDiv.className = 'sources';
-        srcDiv.innerHTML = `<div class="sources-label">Sources</div><div class="source-chips">${sources.map(s => `<span class="source-chip" title="${s}">${s}</span>`).join('')}</div>`;
+        srcDiv.innerHTML = `<div class="sources-label">Sources</div><div class="source-chips">${sources.map(renderSource).join('')}</div>`;
         bubble.appendChild(srcDiv);
       }
     } else {
