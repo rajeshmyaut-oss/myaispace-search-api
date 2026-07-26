@@ -925,6 +925,23 @@ def legal_matter_upload(matter_id):
         return _legal_proxy_error(e)
 
 
+@app.post("/v1/legal/extract-allegations")
+def legal_extract_allegations():
+    if "file" not in request.files:
+        return jsonify({"error": "file field is required (multipart/form-data)"}), 400
+    f = request.files["file"]
+    try:
+        resp = requests.post(
+            f"{_LEGAL_RAG_URL}/extract-allegations",
+            files={"file": (f.filename, f.stream, f.mimetype)},
+            headers=_forward_admin_headers(),
+            timeout=180
+        )
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
 # ── Boot ──────────────────────────────────────────────────────────────────────
 init_db()
 

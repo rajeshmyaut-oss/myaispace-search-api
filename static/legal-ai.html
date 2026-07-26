@@ -207,6 +207,11 @@
     .missing-list { margin: 8px 0 0 18px; }
     .missing-list li { margin-bottom: 4px; }
 
+    .allegation-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+    .allegation-text { font-size: 13px; line-height: 1.55; margin-bottom: 8px; }
+    .allegation-text .num { color: var(--accent2); font-weight: 700; margin-right: 4px; }
+    .allegation-card textarea { min-height: 60px; }
+
     @media (max-width: 600px) {
       .bubble { max-width: 92%; }
       .suggestions { grid-template-columns: 1fr; }
@@ -241,6 +246,7 @@
   <button class="tab-btn" data-tab="lawref" onclick="switchTab('lawref')">Law Reference</button>
   <button class="tab-btn" data-tab="matters" onclick="switchTab('matters')">Matters</button>
   <button class="tab-btn" data-tab="newmatter" onclick="switchTab('newmatter')">New Matter</button>
+  <button class="tab-btn" data-tab="counter" onclick="switchTab('counter')">Counter Petition</button>
 </div>
 
 <!-- ── Research tab ────────────────────────────────────────────────── -->
@@ -342,6 +348,34 @@
   </div>
 </div>
 
+<!-- ── Counter Petition tab ─────────────────────────────────────────── -->
+<div class="tab-panel" id="panel-counter">
+  <div class="panel-body">
+    <div class="cpc-callout">
+      Upload the opposing party's petition/notice. The AI reads it and lists out each factual
+      allegation made — nothing more. You then tell it, per allegation, what the client's real
+      response is (admit / deny / explain), and only those real responses go into the counter
+      draft. The AI never fills in a response on the client's behalf.
+    </div>
+    <div class="field"><label>Admin Key</label><input type="password" id="cp-admin-key" placeholder="X-Admin-Key" /></div>
+    <div class="field"><label>Opposing Party's Document</label><input type="file" id="cp-file" /></div>
+    <button class="btn secondary" onclick="extractAllegations()" id="cp-extract-btn">Extract Allegations</button>
+
+    <div id="cp-allegations" style="margin-top:20px;"></div>
+
+    <div id="cp-draft-section" style="display:none; margin-top:20px;">
+      <div class="field"><label>Matter ID (optional &mdash; pulls in that matter's uploaded documents)</label><input type="text" id="cp-matter-id" placeholder="e.g. a1b2c3d4e5f6" /></div>
+      <div class="field">
+        <label>Counter Draft Type</label>
+        <select id="cp-draft-type"><option value="">Loading templates&hellip;</option></select>
+      </div>
+      <div class="field"><label>Additional Background Facts (optional)</label><textarea id="cp-extra-facts" placeholder="Anything else relevant that isn't a direct reply to a specific allegation above (e.g. counter-claim facts, jurisdiction, client's own account of events)..."></textarea></div>
+      <button class="btn" onclick="generateCounterDraft()" id="cp-draft-btn">Generate Counter Petition</button>
+    </div>
+    <div id="cp-result"></div>
+  </div>
+</div>
+
 <script>
   // ── Tabs ─────────────────────────────────────────────────────────
   function switchTab(name) {
@@ -351,6 +385,7 @@
     if (name === 'draft' && !draftTypesLoaded) loadDraftTypes();
     if (name === 'lawref' && !crosswalkLoaded) loadCrosswalk();
     if (name === 'newmatter' && !nmDraftTypesLoaded) loadDraftTypesNM();
+    if (name === 'counter' && !cpDraftTypesLoaded) loadDraftTypesCP();
   }
 
   // ── Research chat ────────────────────────────────────────────────
@@ -403,6 +438,12 @@
         srcDiv.innerHTML = `<div class="sources-label">Sources</div><div class="source-chips">${sources.map(renderSource).join('')}</div>`;
         bubble.appendChild(srcDiv);
       }
+      const dlBtn = document.createElement('button');
+      dlBtn.className = 'btn secondary';
+      dlBtn.style.cssText = 'margin-top:10px;font-size:11px;padding:5px 10px;';
+      dlBtn.textContent = 'Download as Word';
+      dlBtn.onclick = () => downloadDraftAsWord(content, 'legal-research-answer');
+      bubble.appendChild(dlBtn);
     } else {
       bubble.textContent = content;
     }
@@ -651,6 +692,123 @@
       resultEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
     }
     btn.disabled = false; btn.textContent = 'Create Matter & Generate Draft';
+  }
+
+  // ── Counter Petition tab ─────────────────────────────────────────
+  let cpDraftTypesLoaded = false;
+  let cpAllegations = [];
+
+  async function loadDraftTypesCP() {
+    const sel = document.getElementById('cp-draft-type');
+    try {
+      const res = await fetch('/v1/legal/draft-types');
+      const data = await res.json();
+      sel.innerHTML = (data.draft_types || []).map(t => `<option value="${t.draft_type}">${t.title}</option>`).join('') || '<option value="">No templates found</option>';
+      cpDraftTypesLoaded = true;
+    } catch (e) {
+      sel.innerHTML = '<option value="">Could not load templates — is Legal RAG running?</option>';
+    }
+  }
+
+  function escapeAttr(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderAllegations() {
+    const listEl = document.getElementById('cp-allegations');
+    if (!cpAllegations.length) { listEl.innerHTML = ''; return; }
+    listEl.innerHTML = cpAllegations.map((a, i) => `
+      <div class="allegation-card">
+        <div class="allegation-text"><span class="num">${i + 1}.</span>${escapeAttr(a)}</div>
+        <div class="field" style="margin-bottom:0;">
+          <label>Client's response (admit / deny / explain — the real facts)</label>
+          <textarea id="cp-response-${i}" placeholder="e.g. Denied. The client's actual income is..., or Admitted, but..."></textarea>
+        </div>
+      </div>
+    `).join('');
+    document.getElementById('cp-draft-section').style.display = 'block';
+  }
+
+  async function extractAllegations() {
+    const btn = document.getElementById('cp-extract-btn');
+    const key = document.getElementById('cp-admin-key').value.trim();
+    const fileInput = document.getElementById('cp-file');
+    const listEl = document.getElementById('cp-allegations');
+    if (!fileInput.files.length) { listEl.innerHTML = '<div class="error-msg">Choose the opposing party\'s document first.</div>'; return; }
+    const fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    btn.disabled = true; btn.textContent = 'Reading document...';
+    listEl.innerHTML = '';
+    document.getElementById('cp-draft-section').style.display = 'none';
+    document.getElementById('cp-result').innerHTML = '';
+    try {
+      const res = await fetch('/v1/legal/extract-allegations', { method: 'POST', headers: { 'X-Admin-Key': key }, body: fd });
+      const data = await res.json();
+      if (!res.ok) {
+        listEl.innerHTML = `<div class="error-msg">${data.detail || data.error || 'Could not extract allegations'}</div>`;
+      } else {
+        cpAllegations = data.allegations || [];
+        if (!cpAllegations.length) {
+          listEl.innerHTML = '<div class="cw-note">No substantive allegations were found in this document.</div>';
+        } else {
+          renderAllegations();
+        }
+      }
+    } catch (e) {
+      listEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
+    }
+    btn.disabled = false; btn.textContent = 'Extract Allegations';
+  }
+
+  async function generateCounterDraft() {
+    const btn = document.getElementById('cp-draft-btn');
+    const resultEl = document.getElementById('cp-result');
+    const key = document.getElementById('cp-admin-key').value.trim();
+    const matterId = document.getElementById('cp-matter-id').value.trim();
+    const draftType = document.getElementById('cp-draft-type').value;
+    const extraFacts = document.getElementById('cp-extra-facts').value.trim();
+
+    if (!draftType) { resultEl.innerHTML = '<div class="error-msg">Pick a counter draft type first.</div>'; return; }
+
+    const parts = cpAllegations.map((a, i) => {
+      const respEl = document.getElementById(`cp-response-${i}`);
+      const resp = respEl ? respEl.value.trim() : '';
+      return `Allegation ${i + 1}: ${a}\nClient's response: ${resp || '(not yet provided — leave as a placeholder in the draft)'}`;
+    }).join('\n\n');
+    const facts = [parts, extraFacts ? `Additional background facts:\n${extraFacts}` : ''].filter(Boolean).join('\n\n');
+
+    if (!facts.trim()) { resultEl.innerHTML = '<div class="error-msg">Extract allegations and/or add background facts first.</div>'; return; }
+
+    btn.disabled = true; btn.textContent = 'Generating...';
+    resultEl.innerHTML = '';
+    try {
+      const res = await fetch('/v1/legal/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+        body: JSON.stringify({ draft_type: draftType, facts, matter_id: matterId || null })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        resultEl.innerHTML = `<div class="error-msg">Error: ${data.detail || data.error || 'Something went wrong'}</div>`;
+      } else {
+        const missing = extractMissingDetails(data.draft || '');
+        const missingBlock = missing.length
+          ? `<div class="cpc-callout" style="margin-top:16px;">
+               <strong>Still needed before filing</strong> &mdash; get the real details from the client rather than guessing:
+               <ul class="missing-list">${missing.map(l => `<li>${l}</li>`).join('')}</ul>
+             </div>`
+          : '';
+        resultEl.innerHTML =
+          `<div class="draft-output">${(data.draft || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` +
+          `<div class="cw-note" style="margin-top:8px;">${data.disclaimer || ''}</div>` +
+          `<button class="btn secondary" id="cp-download-btn" style="margin-top:12px;">Download as Word (.doc)</button>` +
+          missingBlock;
+        document.getElementById('cp-download-btn').onclick = () => downloadDraftAsWord(data.draft || '', draftType);
+      }
+    } catch (e) {
+      resultEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
+    }
+    btn.disabled = false; btn.textContent = 'Generate Counter Petition';
   }
 
   async function uploadDoc() {
