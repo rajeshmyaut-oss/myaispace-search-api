@@ -925,6 +925,24 @@ def legal_matter_upload(matter_id):
         return _legal_proxy_error(e)
 
 
+@app.route("/v1/legal/lawyer-profile", methods=["GET", "POST"])
+def legal_lawyer_profile():
+    try:
+        if request.method == "POST":
+            data = request.get_json() or {}
+            resp = requests.post(
+                f"{_LEGAL_RAG_URL}/lawyer-profile",
+                json=data,
+                headers=_forward_admin_headers(),
+                timeout=30
+            )
+        else:
+            resp = requests.get(f"{_LEGAL_RAG_URL}/lawyer-profile", headers=_forward_admin_headers(), timeout=30)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return _legal_proxy_error(e)
+
+
 @app.get("/v1/legal/drafts")
 def legal_drafts():
     try:

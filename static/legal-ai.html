@@ -256,6 +256,7 @@
   <button class="tab-btn" data-tab="newmatter" onclick="switchTab('newmatter')">New Matter</button>
   <button class="tab-btn" data-tab="counter" onclick="switchTab('counter')">Counter Petition</button>
   <button class="tab-btn" data-tab="history" onclick="switchTab('history')">All Matters &amp; Drafts</button>
+  <button class="tab-btn" data-tab="profile" onclick="switchTab('profile')">Lawyer Profile</button>
 </div>
 
 <!-- ── Research tab ────────────────────────────────────────────────── -->
@@ -397,6 +398,29 @@
 
     <div class="section-label">Drafts</div>
     <div id="hist-drafts"></div>
+  </div>
+</div>
+
+<!-- ── Lawyer Profile tab ───────────────────────────────────────────── -->
+<div class="tab-panel" id="panel-profile">
+  <div class="panel-body">
+    <div class="cpc-callout">
+      Save your own details once and every draft (Draft, New Matter, Counter Petition) will
+      automatically include a "Counsel for &lt;party&gt;" block with them, instead of leaving it
+      blank. Leave a field empty to omit it.
+    </div>
+    <div class="field"><label>Admin Key</label><input type="password" id="profile-admin-key" placeholder="X-Admin-Key" /></div>
+    <div class="field"><label>Name</label><input type="text" id="profile-name" placeholder="e.g. Adv. Priya Reddy" /></div>
+    <div class="field"><label>Enrollment No.</label><input type="text" id="profile-enrollment" placeholder="e.g. TS/1234/2015" /></div>
+    <div class="field"><label>Bar Association</label><input type="text" id="profile-bar" placeholder="e.g. Bar Council of Telangana" /></div>
+    <div class="field"><label>Office Address</label><textarea id="profile-address" placeholder="e.g. Chamber No. 12, City Civil Court Complex, Hyderabad"></textarea></div>
+    <div class="field"><label>Phone</label><input type="text" id="profile-phone" placeholder="e.g. +91-9876543210" /></div>
+    <div class="field"><label>Email</label><input type="text" id="profile-email" placeholder="e.g. name@example.com" /></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn secondary" onclick="loadLawyerProfile()">Load</button>
+      <button class="btn" onclick="saveLawyerProfile()" id="profile-save-btn">Save</button>
+    </div>
+    <div id="profile-result" style="margin-top:12px;"></div>
   </div>
 </div>
 
@@ -910,6 +934,56 @@
     } catch (e) {
       alert('Could not connect to the AI. Make sure the Legal RAG service is running.');
     }
+  }
+
+  // ── Lawyer Profile tab ────────────────────────────────────────────
+  async function loadLawyerProfile() {
+    const key = document.getElementById('profile-admin-key').value.trim();
+    const resultEl = document.getElementById('profile-result');
+    resultEl.innerHTML = '';
+    try {
+      const res = await fetch('/v1/legal/lawyer-profile', { headers: { 'X-Admin-Key': key } });
+      const data = await res.json();
+      if (!res.ok) { resultEl.innerHTML = `<div class="error-msg">${data.detail || 'Error loading profile'}</div>`; return; }
+      document.getElementById('profile-name').value = data.name || '';
+      document.getElementById('profile-enrollment').value = data.enrollment_no || '';
+      document.getElementById('profile-bar').value = data.bar_association || '';
+      document.getElementById('profile-address').value = data.office_address || '';
+      document.getElementById('profile-phone').value = data.phone || '';
+      document.getElementById('profile-email').value = data.email || '';
+    } catch (e) {
+      resultEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
+    }
+  }
+
+  async function saveLawyerProfile() {
+    const btn = document.getElementById('profile-save-btn');
+    const key = document.getElementById('profile-admin-key').value.trim();
+    const resultEl = document.getElementById('profile-result');
+    const body = {
+      name: document.getElementById('profile-name').value.trim(),
+      enrollment_no: document.getElementById('profile-enrollment').value.trim(),
+      bar_association: document.getElementById('profile-bar').value.trim(),
+      office_address: document.getElementById('profile-address').value.trim(),
+      phone: document.getElementById('profile-phone').value.trim(),
+      email: document.getElementById('profile-email').value.trim(),
+    };
+    btn.disabled = true; btn.textContent = 'Saving...';
+    resultEl.innerHTML = '';
+    try {
+      const res = await fetch('/v1/legal/lawyer-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      resultEl.innerHTML = res.ok
+        ? '<div class="cw-note">Saved. New drafts will use these details.</div>'
+        : `<div class="error-msg">${data.detail || 'Error saving profile'}</div>`;
+    } catch (e) {
+      resultEl.innerHTML = '<div class="error-msg">Could not connect to the AI. Make sure the Legal RAG service is running.</div>';
+    }
+    btn.disabled = false; btn.textContent = 'Save';
   }
 
   async function uploadDoc() {
