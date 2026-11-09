@@ -5,7 +5,7 @@ import json
 import httpx
 from datetime import datetime, date
 from functools import wraps
-from flask import Flask, request, jsonify, Response, send_from_directory
+from flask import Flask, request, jsonify, Response, send_from_directory, redirect
 from flask_cors import CORS
 from duckduckgo_search import DDGS
 import requests
@@ -751,6 +751,12 @@ def serve_myvideos():
         os.path.join(os.path.dirname(__file__), "..", "static"),
         "myvideos.html"
     )
+
+
+# ── DataDesk — BI app hosted on the home server (Cloudflare tunnel) ─────────
+@app.get("/datadesk")
+def go_datadesk():
+    return redirect("https://datadesk.myaispace.in", code=302)
 
 
 # ── CompleteHealth AI — page + proxy ─────────────────────────────────────────
