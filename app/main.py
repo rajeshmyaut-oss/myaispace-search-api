@@ -744,15 +744,6 @@ def ai_chat():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-# ── My Videos — private Jellyfin link page ────────────────────────────────────
-@app.get("/myvideos")
-def serve_myvideos():
-    return send_from_directory(
-        os.path.join(os.path.dirname(__file__), "..", "static"),
-        "myvideos.html"
-    )
-
-
 # ── DataDesk — BI app hosted on the home server (Cloudflare tunnel) ─────────
 @app.get("/datadesk")
 def go_datadesk():
